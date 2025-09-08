@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lex Praxis Solutions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Inicialización de las variables globales de Firebase
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+        let db, auth, userId;
+        let unsubscribeRat;
+
+        // Configuración de los botones de navegación
+        const homeButton = document.getElementById('homeButton');
+        const ratButton = document.getElementById('ratButton');
+        const analyticsButton = document.getElementById('analyticsButton');
+        const contentDivs = document.querySelectorAll('.content-section');
+
+        // Función para mostrar solo una sección del contenido
+        const showSection = (sectionId) => {
+            contentDivs.forEach(div => {
+                div.classList.add('hidden');
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+        };
+
+        // Eventos para la navegación
+        homeButton.addEventListener('click', () => showSection('homeSection'));
+        ratButton.addEventListener('click', () => showSection('ratSection'));
+        analyticsButton.addEventListener('click', () => showSection('analyticsSection'));
+
+        // ===============================================
+        // Lógica de Autenticación y Base de Datos
+        // ===============================================
+        window.addEventListener('load', async () => {
+            try {
+                // Habilitar logs para depuración
+                setLogLevel('Debug');
+
+                // Inicializar Firebase
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticar al usuario con el token proporcionado
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                }
+
+                // Escuchar cambios en el estado de autenticación
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId;
+                        showSection('homeSection'); // Mostrar la sección de inicio después de la autenticación
+                        
+                        // Una vez autenticado, inicializar los listeners de la base de datos
+                        initFirestoreListeners();
+
+                    } else {
+                        // Si no hay usuario, iniciar sesión anónima
+                        const { user } = await signInAnonymously(auth);
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId;
+                        showSection('homeSection');
+                        initFirestoreListeners();
+                    }
+                });
+
+            } catch (e) {
+                console.error("Error al inicializar Firebase:", e);
+                document.getElementById('userIdDisplay').textContent = "Error de autenticación.";
+                showSection('homeSection');
+            }
+        });
+
+        // ===============================================
+        // Funciones de Firestore (CRUD y Listeners)
+        // ===============================================
+        const initFirestoreListeners = () => {
+            // Desuscribirse de cualquier listener anterior para evitar duplicados
+            if (unsubscribeRat) {
+                unsubscribeRat();
+            }
+
+            // Path de la colección de RATs (privada para cada usuario)
+            const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+
+            // Escuchar cambios en tiempo real
+            unsubscribeRat = onSnapshot(ratCollectionRef, (snapshot) => {
+                const rats = [];
+                snapshot.forEach(doc => {
+                    rats.push({ id: doc.id, ...doc.data() });
+                });
+                renderRatsTable(rats);
+            }, (error) => {
+                console.error("Error al escuchar los datos de RATs:", error);
+            });
+        };
+
+        const addRat = async (data) => {
+            try {
+                const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+                await addDoc(ratCollectionRef, data);
+                showNotification('Registro de RAT añadido con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al agregar documento:", e);
+                showNotification('Error al añadir el registro.', 'bg-red-500');
+            }
+        };
+
+        const updateRat = async (id, data) => {
+            try {
+                const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+                await updateDoc(ratDocRef, data);
+                showNotification('Registro de RAT actualizado con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al actualizar documento:", e);
+                showNotification('Error al actualizar el registro.', 'bg-red-500');
+            }
+        };
+
+        const deleteRat = async (id) => {
+            if (!id) {
+                showNotification('Error: ID del documento no válido.', 'bg-red-500');
+                return;
+            }
+            try {
+                const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+                await deleteDoc(ratDocRef);
+                showNotification('Registro de RAT eliminado con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al eliminar documento:", e);
+                showNotification('Error al eliminar el registro.', 'bg-red-500');
+            }
+        };
+
+        // ===============================================
+        // Lógica de UI y Renderizado
+        // ===============================================
+        const ratForm = document.getElementById('ratForm');
+        ratForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                nombre_tratamiento: document.getElementById('nombre_tratamiento').value,
+                proposito: document.getElementById('proposito').value,
+                tipos_datos: document.getElementById('tipos_datos').value.split(',').map(s => s.trim()),
+                responsable: document.getElementById('responsable').value,
+                fecha_creacion: new Date().toISOString()
+            };
+
+            const ratId = document.getElementById('ratId').value;
+            if (ratId) {
+                updateRat(ratId, data);
+            } else {
+                addRat(data);
+            }
+
+            ratForm.reset();
+            document.getElementById('ratId').value = '';
+        });
+
+        const renderRatsTable = (rats) => {
+            const tbody = document.getElementById('ratTableBody');
+            tbody.innerHTML = '';
+            if (rats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No hay registros de RAT.</td></tr>';
+                return;
+            }
+
+            rats.forEach(rat => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4">${rat.nombre_tratamiento}</td>
+                    <td class="px-6 py-4">${rat.proposito}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${rat.tipos_datos.join(', ')}</td>
+                    <td class="px-6 py-4">${rat.responsable}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button class="font-medium text-blue-600 hover:text-blue-900 mr-2" onclick="editRat('${rat.id}')">Editar</button>
+                        <button class="font-medium text-red-600 hover:text-red-900" onclick="confirmDelete('${rat.id}')">Eliminar</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        };
+
+        window.editRat = async (id) => {
+            const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+            const docSnap = await getDoc(ratDocRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                document.getElementById('ratId').value = docSnap.id;
+                document.getElementById('nombre_tratamiento').value = data.nombre_tratamiento;
+                document.getElementById('proposito').value = data.proposito;
+                document.getElementById('tipos_datos').value = data.tipos_datos.join(', ');
+                document.getElementById('responsable').value = data.responsable;
+                showSection('ratSection');
+                document.getElementById('ratForm').scrollIntoView({ behavior: 'smooth' });
+            }
+        };
+        
+        // Simulación de un modal de confirmación, ya que 'confirm()' no se permite
+        window.confirmDelete = (id) => {
+            const modal = document.getElementById('confirmationModal');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            const cancelBtn = document.getElementById('modalCancelBtn');
+            
+            modal.classList.remove('hidden');
+            
+            confirmBtn.onclick = () => {
+                deleteRat(id);
+                modal.classList.add('hidden');
+            };
+            
+            cancelBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        };
+
+        // ===============================================
+        // Análisis de Datos (Simulación)
+        // ===============================================
+        const analyzeDataBtn = document.getElementById('analyzeDataBtn');
+        analyzeDataBtn.addEventListener('click', () => {
+            runDataAnalysis();
+        });
+
+        const runDataAnalysis = async () => {
+            const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+            const snapshot = await getDocs(ratCollectionRef);
+            
+            const totalRecords = snapshot.size;
+            let dataTypesCount = {};
+            let mostFrequentData = 'N/A';
+            let mostFrequentCount = 0;
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.tipos_datos) {
+                    data.tipos_datos.forEach(type => {
+                        dataTypesCount[type] = (dataTypesCount[type] || 0) + 1;
+                    });
+                }
+            });
+
+            // Encontrar el tipo de dato más frecuente
+            for (const type in dataTypesCount) {
+                if (dataTypesCount[type] > mostFrequentCount) {
+                    mostFrequentCount = dataTypesCount[type];
+                    mostFrequentData = type;
+                }
+            }
+
+            // Renderizar los resultados
+            document.getElementById('totalRecords').textContent = totalRecords;
+            document.getElementById('mostFrequentDataType').textContent = mostFrequentData;
+            document.getElementById('dataAnalysisResults').classList.remove('hidden');
+        };
+
+        const showNotification = (message, color) => {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `p-4 text-center text-white rounded-lg transition-transform transform translate-y-0 fixed bottom-4 right-4 z-50 ${color}`;
+            setTimeout(() => {
+                notification.className = `p-4 text-center text-white rounded-lg transition-transform transform translate-y-20 fixed bottom-4 right-4 z-50 ${color}`;
+            }, 3000);
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F3F4F6;
+        }
+        .container-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center">
+
+    <!-- Navbar -->
+    <nav class="bg-white container-shadow w-full sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 text-blue-600 font-bold text-xl">
+                        Lex Praxis Solutions
+                    </div>
+                    <div class="hidden md:block">
+                        <div class="ml-10 flex items-baseline space-x-4">
+                            <button id="homeButton" class="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Inicio</button>
+                            <button id="ratButton" class="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Gestión de RAT</button>
+                            <button id="analyticsButton" class="text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Análisis de Datos</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 text-gray-500 text-sm">
+                    ID de Usuario: <span id="userIdDisplay" class="font-mono text-xs">Cargando...</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 mt-8">
+
+        <!-- Notificación de éxito/error -->
+        <div id="notification" class="hidden"></div>
+        
+        <!-- Modal de confirmación -->
+        <div id="confirmationModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-800 bg-opacity-50 hidden">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full container-shadow">
+                <p class="text-lg font-semibold text-gray-800">¿Está seguro de que desea eliminar este registro?</p>
+                <div class="mt-4 flex justify-end space-x-2">
+                    <button id="modalCancelBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
+                    <button id="modalConfirmBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Eliminar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Home Section -->
+        <div id="homeSection" class="content-section">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h1 class="text-3xl font-bold text-gray-800 mb-4">Bienvenido a Lex Praxis Solutions</h1>
+                <p class="text-gray-600 mb-6">Su plataforma integral para el cumplimiento de la Ley de Protección de Datos Personales de Ecuador. Gestione sus Registros de Actividades de Tratamiento (RAT) de forma sencilla y segura.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-gray-100 p-6 rounded-lg text-center transition-transform hover:scale-105">
+                        <svg class="w-12 h-12 mx-auto mb-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <h3 class="font-semibold text-lg text-gray-800">Gestión Sencilla</h3>
+                        <p class="text-sm text-gray-600">Cree y edite sus registros de tratamiento con una interfaz intuitiva.</p>
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-lg text-center transition-transform hover:scale-105">
+                        <svg class="w-12 h-12 mx-auto mb-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V9a2 2 0 012-2h2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h3 class="font-semibold text-lg text-gray-800">Seguridad de Datos</h3>
+                        <p class="text-sm text-gray-600">Sus datos se almacenan de forma segura en Firestore, con el respaldo de Google.</p>
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-lg text-center transition-transform hover:scale-105">
+                        <svg class="w-12 h-12 mx-auto mb-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h3 class="font-semibold text-lg text-gray-800">Análisis Instantáneo</h3>
+                        <p class="text-sm text-gray-600">Visualice sus datos para entender mejor su cumplimiento y riesgos.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestión de RAT Section -->
+        <div id="ratSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Gestión de Registro de Actividades de Tratamiento (RAT)</h2>
+                <p class="text-gray-600 mb-6">Cree, edite o elimine sus registros de tratamiento de datos personales. Este es su inventario de cumplimiento.</p>
+
+                <!-- Formulario para agregar/editar RAT -->
+                <form id="ratForm" class="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <input type="hidden" id="ratId">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="nombre_tratamiento" class="block text-sm font-medium text-gray-700">Nombre del Tratamiento</label>
+                            <input type="text" id="nombre_tratamiento" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="proposito" class="block text-sm font-medium text-gray-700">Propósito del Tratamiento</label>
+                            <input type="text" id="proposito" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="tipos_datos" class="block text-sm font-medium text-gray-700">Tipos de Datos (separados por coma)</label>
+                            <input type="text" id="tipos_datos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="responsable" class="block text-sm font-medium text-gray-700">Responsable del Tratamiento</label>
+                            <input type="text" id="responsable" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Guardar Registro
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Tabla de registros existentes -->
+                <div class="overflow-x-auto relative shadow-md sm:rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="py-3 px-6">Nombre del Tratamiento</th>
+                                <th scope="col" class="py-3 px-6">Propósito</th>
+                                <th scope="col" class="py-3 px-6">Tipos de Datos</th>
+                                <th scope="col" class="py-3 px-6">Responsable</th>
+                                <th scope="col" class="py-3 px-6">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ratTableBody">
+                            <tr><td colspan="5" class="text-center py-4 text-gray-500">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Análisis de Datos -->
+        <div id="analyticsSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Análisis de Datos y Estadísticas</h2>
+                <p class="text-gray-600 mb-6">Obtenga una visión general de sus Registros de Actividades de Tratamiento (RAT) para identificar áreas de riesgo y oportunidades de mejora en el cumplimiento.</p>
+
+                <div class="text-center">
+                    <button id="analyzeDataBtn" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-md shadow-lg hover:bg-blue-700 transition-colors">
+                        Generar Análisis
+                    </button>
+                </div>
+
+                <!-- Resultados del análisis -->
+                <div id="dataAnalysisResults" class="hidden mt-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Resumen del Análisis</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-white rounded-lg border border-gray-200">
+                            <p class="text-sm font-medium text-gray-500">Total de Registros de Tratamiento</p>
+                            <p id="totalRecords" class="text-3xl font-bold text-gray-900 mt-1">0</p>
+                        </div>
+                        <div class="p-4 bg-white rounded-lg border border-gray-200">
+                            <p class="text-sm font-medium text-gray-500">Tipo de Dato Más Frecuente</p>
+                            <p id="mostFrequentDataType" class="text-xl font-bold text-gray-900 mt-1">N/A</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</body>
+</html>
