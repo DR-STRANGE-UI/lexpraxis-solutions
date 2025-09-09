@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lex Praxis Solutions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
+        .container-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .tab-button {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #2563EB;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 600px;
+            margin: auto;
+        }
+        .modal {
+            transition: all 0.3s ease-in-out;
+            opacity: 0;
+            transform: scale(0.9);
+            pointer-events: none;
+        }
+        .modal.open {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center">
+
+    <!-- Navbar -->
+    <nav class="bg-white container-shadow w-full sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 text-blue-600 font-bold text-xl">
+                        Lex Praxis Solutions
+                    </div>
+                    <div class="hidden md:block">
+                        <div class="ml-10 flex items-baseline space-x-4">
+                            <button id="homeButton" class="tab-button text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium active">Inicio</button>
+                            <button id="registerClientButton" class="tab-button text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Registro de Clientes</button>
+                            <button id="ratButton" class="tab-button text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Gestión de RAT</button>
+                            <button id="analyticsButton" class="tab-button text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Análisis y Forense</button>
+                            <button id="piaButton" class="tab-button text-gray-700 hover:bg-gray-200 px-3 py-2 rounded-md text-sm font-medium">Evaluación de Impacto</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 text-gray-500 text-sm">
+                    ID de Usuario: <span id="userIdDisplay" class="font-mono text-xs">Cargando...</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 mt-8">
+
+        <!-- Notificación de éxito/error -->
+        <div id="notification" class="fixed bottom-4 right-4 z-50 p-4 text-center text-white rounded-lg transition-transform transform translate-y-20"></div>
+        
+        <!-- Modal de confirmación -->
+        <div id="confirmationModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-800 bg-opacity-50 hidden">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full container-shadow">
+                <p class="text-lg font-semibold text-gray-800">¿Está seguro de que desea eliminar este registro?</p>
+                <div class="mt-4 flex justify-end space-x-2">
+                    <button id="modalCancelBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
+                    <button id="modalConfirmBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Eliminar</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal de autenticación 2FA -->
+        <div id="authModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-800 bg-opacity-50 hidden">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full container-shadow">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Autenticación de Dos Factores</h3>
+                <p class="text-gray-600 mb-4">Se ha enviado un código de seguridad a su correo electrónico. Por favor, ingréselo a continuación.</p>
+                <form id="authForm" class="space-y-4">
+                    <input type="text" id="authCodeInput" placeholder="Código de 6 dígitos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                    <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                        Verificar
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Home Section -->
+        <div id="homeSection" class="content-section">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h1 class="text-3xl font-bold text-gray-800 mb-4">Bienvenido a Lex Praxis Solutions</h1>
+                <p class="text-gray-600 mb-6">Su plataforma integral para el cumplimiento de la Ley de Protección de Datos Personales de Ecuador. Gestione sus Registros de Actividades de Tratamiento (RAT) de forma sencilla y segura.</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-blue-100 p-6 rounded-lg text-center border border-blue-200">
+                        <p class="text-sm font-semibold text-blue-700 uppercase">Registros Totales</p>
+                        <p id="totalRecordsHome" class="text-4xl font-extrabold text-blue-900 mt-2">0</p>
+                    </div>
+                    <div class="bg-green-100 p-6 rounded-lg text-center border border-green-200">
+                        <p class="text-sm font-semibold text-green-700 uppercase">Datos Personales</p>
+                        <p id="personalDataCount" class="text-4xl font-extrabold text-green-900 mt-2">0</p>
+                    </div>
+                    <div class="bg-red-100 p-6 rounded-lg text-center border border-red-200">
+                        <p class="text-sm font-semibold text-red-700 uppercase">Datos Sensibles</p>
+                        <p id="sensitiveDataCount" class="text-4xl font-extrabold text-red-900 mt-2">0</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-gray-50 p-6 rounded-lg container-shadow">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Métricas Clave de Cumplimiento</h3>
+                        <div class="chart-container">
+                            <canvas id="complianceChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-lg container-shadow">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Últimos Registros Añadidos</h3>
+                        <ul id="latestRecordsList" class="space-y-4">
+                            <!-- Últimos registros se renderizan aquí -->
+                            <li class="text-gray-500">No hay registros recientes.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Registro de Clientes -->
+        <div id="registerClientSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Registro de Empresas Clientes</h2>
+                <p class="text-gray-600 mb-6">Registre una nueva empresa cliente para asignarle acceso a la plataforma. Se generará un código de acceso único.</p>
+
+                <!-- Formulario de Registro de Empresa -->
+                <form id="clientRegisterForm" class="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <div>
+                        <label for="companyName" class="block text-sm font-medium text-gray-700">Nombre de la Empresa</label>
+                        <input type="text" id="companyName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                    </div>
+                    <div class="mt-4">
+                        <label for="companyRUC" class="block text-sm font-medium text-gray-700">RUC de la Empresa</label>
+                        <input type="text" id="companyRUC" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2" maxlength="13">
+                    </div>
+                    <div class="mt-6">
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Registrar Empresa
+                        </button>
+                    </div>
+                </form>
+
+                <div class="overflow-x-auto relative shadow-md sm:rounded-lg">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Empresas Registradas</h3>
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="py-3 px-6">Empresa</th>
+                                <th scope="col" class="py-3 px-6">RUC</th>
+                                <th scope="col" class="py-3 px-6">Código de Acceso</th>
+                                <th scope="col" class="py-3 px-6">Estado</th>
+                                <th scope="col" class="py-3 px-6">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTableBody">
+                            <tr><td colspan="5" class="text-center py-4 text-gray-500">No hay clientes registrados.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestión de RAT Section -->
+        <div id="ratSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Gestión de Registro de Actividades de Tratamiento (RAT)</h2>
+                <p class="text-gray-600 mb-6">Cree, edite o elimine sus registros de tratamiento de datos personales. Este es su inventario de cumplimiento.</p>
+                <form id="ratForm" class="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <input type="hidden" id="ratId">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="nombre_tratamiento" class="block text-sm font-medium text-gray-700">Nombre del Tratamiento</label>
+                            <input type="text" id="nombre_tratamiento" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="proposito" class="block text-sm font-medium text-gray-700">Propósito del Tratamiento</label>
+                            <input type="text" id="proposito" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="tipos_datos" class="block text-sm font-medium text-gray-700">Tipos de Datos (separados por coma)</label>
+                            <input type="text" id="tipos_datos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2" placeholder="Ej: nombre, email, datos_salud">
+                        </div>
+                        <div>
+                            <label for="responsable" class="block text-sm font-medium text-gray-700">Responsable del Tratamiento</label>
+                            <input type="text" id="responsable" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="base_legal" class="block text-sm font-medium text-gray-700">Base Legal (LOPDP)</label>
+                            <select id="base_legal" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                                <option value="">Seleccione una base legal</option>
+                                <option value="Consentimiento">Consentimiento</option>
+                                <option value="Contrato">Contrato</option>
+                                <option value="Obligación Legal">Obligación Legal</option>
+                                <option value="Interés Público">Interés Público</option>
+                                <option value="Interés Vital">Interés Vital</option>
+                                <option value="Interés Legítimo">Interés Legítimo</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="plazo_conservacion" class="block text-sm font-medium text-gray-700">Plazo de Conservación (años)</label>
+                            <input type="number" id="plazo_conservacion" required min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Guardar Registro
+                        </button>
+                    </div>
+                </form>
+                <div class="overflow-x-auto relative shadow-md sm:rounded-lg">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="py-3 px-6">Tratamiento</th>
+                                <th scope="col" class="py-3 px-6">Propósito</th>
+                                <th scope="col" class="py-3 px-6">Tipos de Datos</th>
+                                <th scope="col" class="py-3 px-6">Base Legal</th>
+                                <th scope="col" class="py-3 px-6">Plazo</th>
+                                <th scope="col" class="py-3 px-6">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ratTableBody">
+                            <tr><td colspan="6" class="text-center py-4 text-gray-500">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Análisis y Forense -->
+        <div id="analyticsSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Análisis de Cumplimiento y Forense de Datos</h2>
+                <p class="text-gray-600 mb-6">Obtenga una visión detallada de sus registros para identificar riesgos, tendencias y áreas de mejora.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-blue-100 p-6 rounded-lg text-center border border-blue-200">
+                        <p class="text-sm font-semibold text-blue-700 uppercase">RATs Registrados</p>
+                        <p id="totalRecordsAnalytics" class="text-4xl font-extrabold text-blue-900 mt-2">0</p>
+                    </div>
+                    <div class="bg-orange-100 p-6 rounded-lg text-center border border-orange-200">
+                        <p class="text-sm font-semibold text-orange-700 uppercase">Base Legal Más Común</p>
+                        <p id="mostCommonLegalBasis" class="text-xl font-bold text-orange-900 mt-2">N/A</p>
+                    </div>
+                    <div class="bg-purple-100 p-6 rounded-lg text-center border border-purple-200">
+                        <p class="text-sm font-semibold text-purple-700 uppercase">Tipo de Dato Más Sensible</p>
+                        <p id="mostSensitiveData" class="text-xl font-bold text-purple-900 mt-2">N/A</p>
+                    </div>
+                </div>
+                <div class="mt-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Análisis de Riesgo de Datos</h3>
+                    <div class="chart-container mb-8">
+                        <canvas id="riskChart"></canvas>
+                    </div>
+                    <div id="riskAnalysisSummary" class="text-gray-700">
+                        <p class="font-semibold text-gray-900">Resumen:</p>
+                        <p id="riskSummaryText" class="mt-2 text-sm">Ejecuta el análisis para ver el resumen de riesgos.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Evaluación de Impacto (PIA) -->
+        <div id="piaSection" class="content-section hidden">
+            <div class="bg-white rounded-xl p-8 container-shadow">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Evaluación de Impacto sobre la Privacidad (PIA)</h2>
+                <p class="text-gray-600 mb-6">Realice una evaluación de impacto para identificar y mitigar riesgos antes de iniciar un nuevo tratamiento de datos personales.</p>
+                <form id="piaForm" class="p-6 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="space-y-6">
+                        <div>
+                            <label for="pia_proyecto" class="block text-sm font-medium text-gray-700">Nombre del Proyecto o Proceso</label>
+                            <input type="text" id="pia_proyecto" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="pia_descripcion" class="block text-sm font-medium text-gray-700">Descripción del Tratamiento</label>
+                            <textarea id="pia_descripcion" rows="4" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"></textarea>
+                        </div>
+                        <div>
+                            <label for="pia_riesgos" class="block text-sm font-medium text-gray-700">Riesgos Identificados (separados por coma)</label>
+                            <input type="text" id="pia_riesgos" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2" placeholder="Ej: fuga de datos, acceso no autorizado, uso indebido">
+                        </div>
+                        <div>
+                            <label for="pia_mitigacion" class="block text-sm font-medium text-gray-700">Medidas de Mitigación (separadas por coma)</label>
+                            <input type="text" id="pia_mitigacion" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2" placeholder="Ej: cifrado, anonimización, capacitación">
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Guardar PIA
+                        </button>
+                    </div>
+                </form>
+                <div class="mt-8">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Evaluaciones de Impacto Guardadas</h3>
+                    <div id="piaTable" class="overflow-x-auto relative shadow-md sm:rounded-lg">
+                        <table class="w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="py-3 px-6">Proyecto</th>
+                                    <th scope="col" class="py-3 px-6">Riesgos</th>
+                                    <th scope="col" class="py-3 px-6">Mitigación</th>
+                                    <th scope="col" class="py-3 px-6">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="piaTableBody">
+                                <tr><td colspan="4" class="text-center py-4 text-gray-500">No hay PIAs guardadas.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Inicialización de las variables globales de Firebase
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+        let db, auth, userId;
+        let unsubscribeRat, unsubscribePia, unsubscribeClients;
+        let chartInstances = {};
+        let twoFactorCode = '';
+
+        // Definición de tipos de datos y su clasificación (según LOPDP)
+        const DATA_TYPES_RISK = {
+            'datos_salud': 'Alto',
+            'datos_biometricos': 'Alto',
+            'datos_genéticos': 'Alto',
+            'datos_financieros': 'Medio',
+            'identificación_personal': 'Medio',
+            'email': 'Bajo',
+            'nombre': 'Bajo',
+            'telefono': 'Bajo'
+        };
+
+        const homeButton = document.getElementById('homeButton');
+        const registerClientButton = document.getElementById('registerClientButton');
+        const ratButton = document.getElementById('ratButton');
+        const analyticsButton = document.getElementById('analyticsButton');
+        const piaButton = document.getElementById('piaButton');
+        const contentDivs = document.querySelectorAll('.content-section');
+
+        const showSection = (sectionId) => {
+            contentDivs.forEach(div => {
+                div.classList.add('hidden');
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(sectionId.replace('Section', 'Button')).classList.add('active');
+
+            // Actualiza los gráficos si se navega a la sección de analíticas
+            if (sectionId === 'analyticsSection') {
+                runDataAnalysis();
+            }
+        };
+
+        homeButton.addEventListener('click', () => showSection('homeSection'));
+        registerClientButton.addEventListener('click', () => showSection('registerClientSection'));
+        ratButton.addEventListener('click', () => showSection('ratSection'));
+        analyticsButton.addEventListener('click', () => showSection('analyticsSection'));
+        piaButton.addEventListener('click', () => showSection('piaSection'));
+
+        // ===============================================
+        // Lógica de Autenticación y Base de Datos
+        // ===============================================
+        window.addEventListener('load', async () => {
+            try {
+                setLogLevel('Debug');
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                }
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId;
+                        showSection('homeSection');
+                        initFirestoreListeners();
+                    } else {
+                        const { user } = await signInAnonymously(auth);
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId;
+                        showSection('homeSection');
+                        initFirestoreListeners();
+                    }
+                });
+            } catch (e) {
+                console.error("Error al inicializar Firebase:", e);
+                document.getElementById('userIdDisplay').textContent = "Error de autenticación.";
+                showSection('homeSection');
+            }
+        });
+
+        // ===============================================
+        // Funciones de Firestore (CRUD y Listeners)
+        // ===============================================
+        const initFirestoreListeners = () => {
+            if (unsubscribeRat) unsubscribeRat();
+            if (unsubscribePia) unsubscribePia();
+            if (unsubscribeClients) unsubscribeClients();
+
+            const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+            unsubscribeRat = onSnapshot(ratCollectionRef, (snapshot) => {
+                const rats = [];
+                snapshot.forEach(doc => {
+                    rats.push({ id: doc.id, ...doc.data() });
+                });
+                renderRatsTable(rats);
+                updateHomeDashboard(rats);
+            }, (error) => {
+                console.error("Error al escuchar los datos de RATs:", error);
+            });
+
+            const piaCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/pias`);
+            unsubscribePia = onSnapshot(piaCollectionRef, (snapshot) => {
+                const pias = [];
+                snapshot.forEach(doc => {
+                    pias.push({ id: doc.id, ...doc.data() });
+                });
+                renderPiaTable(pias);
+            }, (error) => {
+                console.error("Error al escuchar los datos de PIA:", error);
+            });
+            
+            const clientsCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/companies`);
+            unsubscribeClients = onSnapshot(clientsCollectionRef, (snapshot) => {
+                const clients = [];
+                snapshot.forEach(doc => {
+                    clients.push({ id: doc.id, ...doc.data() });
+                });
+                renderClientsTable(clients);
+            }, (error) => {
+                console.error("Error al escuchar los datos de Clientes:", error);
+            });
+        };
+
+        const addRat = async (data) => {
+            try {
+                const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+                await addDoc(ratCollectionRef, data);
+                showNotification('Registro de RAT añadido con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al agregar documento:", e);
+                showNotification('Error al añadir el registro.', 'bg-red-500');
+            }
+        };
+
+        const updateRat = async (id, data) => {
+            try {
+                const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+                await updateDoc(ratDocRef, data);
+                showNotification('Registro de RAT actualizado con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al actualizar documento:", e);
+                showNotification('Error al actualizar el registro.', 'bg-red-500');
+            }
+        };
+
+        const deleteRat = async (id) => {
+            if (!id) {
+                showNotification('Error: ID del documento no válido.', 'bg-red-500');
+                return;
+            }
+            try {
+                const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+                await deleteDoc(ratDocRef);
+                showNotification('Registro de RAT eliminado con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al eliminar documento:", e);
+                showNotification('Error al eliminar el registro.', 'bg-red-500');
+            }
+        };
+
+        const addPia = async (data) => {
+            try {
+                const piaCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/pias`);
+                await addDoc(piaCollectionRef, data);
+                showNotification('Evaluación de Impacto guardada con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al guardar PIA:", e);
+                showNotification('Error al guardar la evaluación.', 'bg-red-500');
+            }
+        };
+        
+        const deletePia = async (id) => {
+             if (!id) {
+                showNotification('Error: ID del documento no válido.', 'bg-red-500');
+                return;
+            }
+            try {
+                const piaDocRef = doc(db, `artifacts/${appId}/users/${userId}/pias`, id);
+                await deleteDoc(piaDocRef);
+                showNotification('Evaluación de Impacto eliminada con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al eliminar PIA:", e);
+                showNotification('Error al eliminar la evaluación.', 'bg-red-500');
+            }
+        };
+
+        const registerCompany = async (data) => {
+            try {
+                const companiesCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/companies`);
+                const existingCompanyQuery = query(companiesCollectionRef, where("ruc", "==", data.ruc));
+                const querySnapshot = await getDocs(existingCompanyQuery);
+                
+                if (!querySnapshot.empty) {
+                    showNotification('Error: Ya existe una empresa con este RUC.', 'bg-red-500');
+                    return;
+                }
+                
+                // Generar un código de cliente único
+                const clientCode = crypto.randomUUID().split('-')[0].toUpperCase();
+                
+                await addDoc(companiesCollectionRef, {
+                    ...data,
+                    clientCode: clientCode,
+                    status: 'activo',
+                    fecha_registro: new Date().toISOString()
+                });
+                showNotification(`Empresa registrada. Código de acceso: ${clientCode}`, 'bg-green-500');
+            } catch (e) {
+                console.error("Error al registrar empresa:", e);
+                showNotification('Error al registrar la empresa.', 'bg-red-500');
+            }
+        };
+
+        const deleteClient = async (id) => {
+            if (!id) {
+                showNotification('Error: ID del documento no válido.', 'bg-red-500');
+                return;
+            }
+            try {
+                const clientDocRef = doc(db, `artifacts/${appId}/users/${userId}/companies`, id);
+                await deleteDoc(clientDocRef);
+                showNotification('Cliente eliminado con éxito.', 'bg-green-500');
+            } catch (e) {
+                console.error("Error al eliminar cliente:", e);
+                showNotification('Error al eliminar el cliente.', 'bg-red-500');
+            }
+        };
+
+        // ===============================================
+        // Lógica de UI y Renderizado
+        // ===============================================
+        const ratForm = document.getElementById('ratForm');
+        ratForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                nombre_tratamiento: document.getElementById('nombre_tratamiento').value,
+                proposito: document.getElementById('proposito').value,
+                tipos_datos: document.getElementById('tipos_datos').value.split(',').map(s => s.trim()),
+                responsable: document.getElementById('responsable').value,
+                base_legal: document.getElementById('base_legal').value,
+                plazo_conservacion: parseInt(document.getElementById('plazo_conservacion').value),
+                fecha_creacion: new Date().toISOString()
+            };
+
+            const ratId = document.getElementById('ratId').value;
+            if (ratId) {
+                updateRat(ratId, data);
+            } else {
+                addRat(data);
+            }
+
+            ratForm.reset();
+            document.getElementById('ratId').value = '';
+        });
+
+        const piaForm = document.getElementById('piaForm');
+        piaForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                proyecto: document.getElementById('pia_proyecto').value,
+                descripcion: document.getElementById('pia_descripcion').value,
+                riesgos: document.getElementById('pia_riesgos').value.split(',').map(s => s.trim()),
+                mitigacion: document.getElementById('pia_mitigacion').value.split(',').map(s => s.trim()),
+                fecha_creacion: new Date().toISOString()
+            };
+            addPia(data);
+            piaForm.reset();
+        });
+
+        const clientRegisterForm = document.getElementById('clientRegisterForm');
+        clientRegisterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const data = {
+                companyName: document.getElementById('companyName').value,
+                ruc: document.getElementById('companyRUC').value
+            };
+            registerCompany(data);
+            clientRegisterForm.reset();
+        });
+
+        const renderRatsTable = (rats) => {
+            const tbody = document.getElementById('ratTableBody');
+            tbody.innerHTML = '';
+            if (rats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No hay registros de RAT.</td></tr>';
+                return;
+            }
+
+            rats.forEach(rat => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4">${rat.nombre_tratamiento}</td>
+                    <td class="px-6 py-4">${rat.proposito}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${rat.tipos_datos.join(', ')}</td>
+                    <td class="px-6 py-4">${rat.base_legal}</td>
+                    <td class="px-6 py-4">${rat.plazo_conservacion} años</td>
+                    <td class="px-6 py-4 text-right">
+                        <button class="font-medium text-blue-600 hover:text-blue-900 mr-2" onclick="editRat('${rat.id}')">Editar</button>
+                        <button class="font-medium text-red-600 hover:text-red-900" onclick="confirmDeleteRat('${rat.id}')">Eliminar</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        };
+        
+        const renderPiaTable = (pias) => {
+            const tbody = document.getElementById('piaTableBody');
+            tbody.innerHTML = '';
+            if (pias.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No hay PIAs guardadas.</td></tr>';
+                return;
+            }
+            pias.forEach(pia => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4">${pia.proyecto}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${pia.riesgos.join(', ')}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${pia.mitigacion.join(', ')}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button class="font-medium text-red-600 hover:text-red-900" onclick="confirmDeletePia('${pia.id}')">Eliminar</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        };
+
+        const renderClientsTable = (clients) => {
+            const tbody = document.getElementById('clientsTableBody');
+            tbody.innerHTML = '';
+            if (clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No hay clientes registrados.</td></tr>';
+                return;
+            }
+            clients.forEach(client => {
+                const row = document.createElement('tr');
+                row.className = 'bg-white border-b hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-6 py-4">${client.companyName}</td>
+                    <td class="px-6 py-4">${client.ruc}</td>
+                    <td class="px-6 py-4">${client.clientCode}</td>
+                    <td class="px-6 py-4">${client.status}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button class="font-medium text-red-600 hover:text-red-900" onclick="confirmDeleteClient('${client.id}')">Eliminar</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        };
+
+        window.editRat = async (id) => {
+            const ratDocRef = doc(db, `artifacts/${appId}/users/${userId}/rats`, id);
+            const docSnap = await getDoc(ratDocRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                document.getElementById('ratId').value = docSnap.id;
+                document.getElementById('nombre_tratamiento').value = data.nombre_tratamiento;
+                document.getElementById('proposito').value = data.proposito;
+                document.getElementById('tipos_datos').value = data.tipos_datos.join(', ');
+                document.getElementById('responsable').value = data.responsable;
+                document.getElementById('base_legal').value = data.base_legal;
+                document.getElementById('plazo_conservacion').value = data.plazo_conservacion;
+                showSection('ratSection');
+                document.getElementById('ratForm').scrollIntoView({ behavior: 'smooth' });
+            }
+        };
+        
+        window.confirmDeleteRat = (id) => {
+            const modal = document.getElementById('confirmationModal');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            const cancelBtn = document.getElementById('modalCancelBtn');
+            
+            modal.classList.remove('hidden');
+            
+            confirmBtn.onclick = () => {
+                deleteRat(id);
+                modal.classList.add('hidden');
+            };
+            
+            cancelBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        };
+
+        window.confirmDeletePia = (id) => {
+            const modal = document.getElementById('confirmationModal');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            const cancelBtn = document.getElementById('modalCancelBtn');
+            
+            modal.classList.remove('hidden');
+            
+            confirmBtn.onclick = () => {
+                deletePia(id);
+                modal.classList.add('hidden');
+            };
+            
+            cancelBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        };
+
+        window.confirmDeleteClient = (id) => {
+            const modal = document.getElementById('confirmationModal');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            const cancelBtn = document.getElementById('modalCancelBtn');
+            
+            modal.classList.remove('hidden');
+            
+            confirmBtn.onclick = () => {
+                deleteClient(id);
+                modal.classList.add('hidden');
+            };
+            
+            cancelBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        };
+
+        // ===============================================
+        // Lógica de Análisis y Forense
+        // ===============================================
+        const updateHomeDashboard = (rats) => {
+            const totalRecords = rats.length;
+            let personalDataCount = 0;
+            let sensitiveDataCount = 0;
+            let latestRecordsList = document.getElementById('latestRecordsList');
+            latestRecordsList.innerHTML = '';
+            
+            rats.forEach(rat => {
+                let isSensitive = false;
+                rat.tipos_datos.forEach(type => {
+                    if (DATA_TYPES_RISK[type] === 'Alto') {
+                        isSensitive = true;
+                    }
+                });
+                if (isSensitive) {
+                    sensitiveDataCount++;
+                } else {
+                    personalDataCount++;
+                }
+            });
+
+            document.getElementById('totalRecordsHome').textContent = totalRecords;
+            document.getElementById('personalDataCount').textContent = personalDataCount;
+            document.getElementById('sensitiveDataCount').textContent = sensitiveDataCount;
+            
+            const sortedRats = rats.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion)).slice(0, 5);
+            if (sortedRats.length === 0) {
+                 latestRecordsList.innerHTML = '<li class="text-gray-500">No hay registros recientes.</li>';
+            } else {
+                sortedRats.forEach(rat => {
+                    const li = document.createElement('li');
+                    li.className = 'bg-white p-4 rounded-md border border-gray-200 shadow-sm';
+                    li.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-semibold text-gray-800">${rat.nombre_tratamiento}</h4>
+                            <span class="text-xs text-gray-500">${new Date(rat.fecha_creacion).toLocaleDateString()}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Propósito: ${rat.proposito}</p>
+                    `;
+                    latestRecordsList.appendChild(li);
+                });
+            }
+
+            // Actualizar gráfico de pastel en Home
+            const chartData = {
+                labels: ['Datos Personales', 'Datos Sensibles'],
+                datasets: [{
+                    data: [personalDataCount, sensitiveDataCount],
+                    backgroundColor: ['#3B82F6', '#EF4444'],
+                }]
+            };
+            if (chartInstances.complianceChart) {
+                chartInstances.complianceChart.destroy();
+            }
+            const ctx = document.getElementById('complianceChart').getContext('2d');
+            chartInstances.complianceChart = new Chart(ctx, {
+                type: 'pie',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                    }
+                }
+            });
+        };
+
+        const runDataAnalysis = async () => {
+            const ratCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/rats`);
+            const snapshot = await getDocs(ratCollectionRef);
+            const rats = snapshot.docs.map(doc => doc.data());
+
+            const totalRecords = rats.length;
+            let legalBasisCounts = {};
+            let dataTypesCount = {};
+            let riskLevelCounts = { 'Bajo': 0, 'Medio': 0, 'Alto': 0 };
+
+            rats.forEach(rat => {
+                legalBasisCounts[rat.base_legal] = (legalBasisCounts[rat.base_legal] || 0) + 1;
+                rat.tipos_datos.forEach(type => {
+                    dataTypesCount[type] = (dataTypesCount[type] || 0) + 1;
+                    const risk = DATA_TYPES_RISK[type] || 'Bajo';
+                    riskLevelCounts[risk]++;
+                });
+            });
+
+            // Encontrar la base legal más común
+            const mostCommonLegalBasis = Object.keys(legalBasisCounts).reduce((a, b) => legalBasisCounts[a] > legalBasisCounts[b] ? a : b, 'N/A');
+            const mostSensitiveData = Object.keys(dataTypesCount).sort((a,b) => (DATA_TYPES_RISK[b] || 'Bajo').localeCompare(DATA_TYPES_RISK[a] || 'Bajo')).find(type => DATA_TYPES_RISK[type] === 'Alto') || 'N/A';
+
+            document.getElementById('totalRecordsAnalytics').textContent = totalRecords;
+            document.getElementById('mostCommonLegalBasis').textContent = mostCommonLegalBasis;
+            document.getElementById('mostSensitiveData').textContent = mostSensitiveData;
+
+            // Actualizar el gráfico de barras de riesgo
+            if (chartInstances.riskChart) {
+                chartInstances.riskChart.destroy();
+            }
+            const riskCtx = document.getElementById('riskChart').getContext('2d');
+            chartInstances.riskChart = new Chart(riskCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Riesgo Bajo', 'Riesgo Medio', 'Riesgo Alto'],
+                    datasets: [{
+                        label: 'Número de Datos por Nivel de Riesgo',
+                        data: [riskLevelCounts['Bajo'], riskLevelCounts['Medio'], riskLevelCounts['Alto']],
+                        backgroundColor: ['#22C55E', '#F97316', '#DC2626']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // Generar resumen de análisis forense
+            let riskSummary = 'El análisis muestra la distribución de los tipos de datos según su nivel de riesgo. ';
+            if (riskLevelCounts['Alto'] > 0) {
+                riskSummary += `Se han identificado ${riskLevelCounts['Alto']} tipos de datos de riesgo ALTO. Se recomienda revisar los registros asociados y sus medidas de seguridad.`;
+            } else {
+                riskSummary += 'No se han identificado tipos de datos de riesgo alto. Su cumplimiento parece estar en buen estado.';
+            }
+            document.getElementById('riskSummaryText').textContent = riskSummary;
+        };
+
+        const showNotification = (message, color) => {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `p-4 text-center text-white rounded-lg transition-transform transform translate-y-0 fixed bottom-4 right-4 z-50 ${color}`;
+            setTimeout(() => {
+                notification.className = `p-4 text-center text-white rounded-lg transition-transform transform translate-y-20 fixed bottom-4 right-4 z-50 ${color}`;
+            }, 3000);
+        };
+    </script>
+</body>
+</html>
